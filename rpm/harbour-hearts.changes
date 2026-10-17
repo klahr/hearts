@@ -1,0 +1,4 @@
+* Sat Oct 17 2026 Joachim Klahr <klahr@r8.rs> 0.1.0-1
+- First release: hearts against three bots in three levels, with passing
+  left, right and across, shooting the moon, a game to 50 or 100 points,
+  play speed setting and won and lost games per level
