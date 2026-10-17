@@ -47,6 +47,10 @@ Page {
             remorse.execute(qsTr("Starting a new game"), function() { game.newGame() })
     }
 
+    // A player's name, or a line meant for you, in the player's colour.
+    function coloured(player, text) { return "<font color=\"" + Cards.playerColor(player) + "\">" + text + "</font>" }
+    function named(player) { return coloured(player, game.playerName(player)) }
+
     // A heart is one point, the queen of spades thirteen.
     function points(id) { return Cards.suit(id) === 2 ? 1 : (id === 50 ? 13 : 0) }
 
@@ -71,7 +75,8 @@ Page {
         return { x: x, y: top + tableRow.height - cardHeight }
     }
 
-    // Where each player keeps the tricks taken: under their own cards.
+    // Where each player keeps the tricks taken: under their own cards, yours
+    // behind the first row of your hand.
     function pileSpot(player) {
         var w = page.width
         var middle = cluster.y + tableRow.y + (tableRow.height - cardHeight) / 2
@@ -80,7 +85,7 @@ Page {
         case 2: return { x: (w - cardWidth) / 2, y: cluster.y + northRow.y, rot: 0 }
         case 3: return { x: w - sideShown + (cardHeight - cardWidth) / 2, y: middle, rot: 90 }
         }
-        return { x: (w - cardWidth) / 2, y: cluster.y + handRow.y + Theme.paddingLarge + handRowStep / 2, rot: 0 }
+        return { x: (w - cardWidth) / 2, y: cluster.y + handRow.y + Theme.paddingLarge, rot: 0 }
     }
 
     // The rows of points taken, when a hand is counted.
@@ -103,9 +108,9 @@ Page {
         var p = []
         var i, k, s, n, off, x0, ids, spot
 
-        // Cards out of play wait face down where your hand is.
+        // Cards out of play are hidden where your hand is, and dealt from there.
         for (i = 0; i < 52; ++i)
-            p.push({ x: (w - cw) / 2, y: handY, z: 1, down: true, rot: 0, role: "deck", delay: 0 })
+            p.push({ x: (w - cw) / 2, y: handY, z: 1, down: true, rot: 0, role: "deck", delay: 0, hidden: true })
 
         if (scoring) {
             // Each player's hearts and queen in a row by their name.
@@ -229,7 +234,8 @@ Page {
             Row {
                 id: board
                 x: margin
-                y: Theme.paddingLarge
+                // Below the notch, on phones with one.
+                y: Screen.topCutout.height + Theme.paddingLarge
                 width: parent.width - 2 * margin
 
                 Repeater {
@@ -292,6 +298,7 @@ Page {
                             height: fontMetrics.height
                             horizontalAlignment: Text.AlignHCenter
                             truncationMode: TruncationMode.Fade
+                            textFormat: Text.StyledText
                             color: Theme.secondaryColor
                             font.pixelSize: Theme.fontSizeSmall
                             text: {
@@ -299,32 +306,33 @@ Page {
                                 case Hearts.Pass:
                                     if (game.humanPassed)
                                         return ""
-                                    return [qsTr("Choose three cards for West, on your left."),
-                                            qsTr("Choose three cards for East, on your right."),
-                                            qsTr("Choose three cards for North, across.")][Math.min(game.passDirection, 2)]
+                                    return [qsTr("Choose three cards for %1, on your left."),
+                                            qsTr("Choose three cards for %1, on your right."),
+                                            qsTr("Choose three cards for %1, across.")][Math.min(game.passDirection, 2)]
+                                            .arg(page.named(game.passTarget))
                                 case Hearts.Play:
                                     if (game.trickWinner >= 0) {
                                         var points = page.trickPoints()
                                         if (game.trickWinner === 0)
-                                            return points > 0 ? qsTr("You take %n point(s).", "", points)
-                                                              : qsTr("You take the trick.")
+                                            return page.coloured(0, points > 0 ? qsTr("You take %n point(s).", "", points)
+                                                                               : qsTr("You take the trick."))
                                         return points > 0
-                                                ? qsTr("%1 takes %n point(s).", "", points).arg(game.playerName(game.trickWinner))
-                                                : qsTr("%1 takes the trick.").arg(game.playerName(game.trickWinner))
+                                                ? qsTr("%1 takes %n point(s).", "", points).arg(page.named(game.trickWinner))
+                                                : qsTr("%1 takes the trick.").arg(page.named(game.trickWinner))
                                     }
                                     if (game.humanTurn) {
                                         if (game.tricksPlayed === 0 && game.trick.length === 0)
-                                            return qsTr("Lead the two of clubs.")
+                                            return page.coloured(0, qsTr("Lead the two of clubs."))
                                         if (game.trick.length > 0)
-                                            return qsTr("Your turn. Tap a card to play it.")
-                                        return game.heartsBroken ? qsTr("Your lead.")
-                                                                 : qsTr("Your lead. Hearts are not broken yet.")
+                                            return page.coloured(0, qsTr("Your turn. Tap a card to play it."))
+                                        return page.coloured(0, game.heartsBroken ? qsTr("Your lead.")
+                                                                                  : qsTr("Your lead. Hearts are not broken yet."))
                                     }
                                     if (page.received.length > 0)
-                                        return qsTr("%1 passed you the raised cards.").arg(game.playerName(game.passSource))
+                                        return qsTr("%1 passed you the raised cards.").arg(page.named(game.passSource))
                                     if (game.passDirection === 3 && game.tricksPlayed === 0)
                                         return qsTr("No passing this hand.")
-                                    return qsTr("%1 is playing…").arg(game.playerName(game.turn))
+                                    return qsTr("%1 is playing…").arg(page.named(game.turn))
                                 }
                                 return ""
                             }
@@ -483,6 +491,7 @@ Page {
                     cardId: index
                     faceDown: place.down
                     z: place.z
+                    opacity: place.hidden === true ? 0 : 1
                     selected: inHand && page.selected.indexOf(index) >= 0
                     // The cards passed to you, and the card winning the trick.
                     glowing: place.glow === true || (inHand && page.received.indexOf(index) >= 0)
@@ -519,6 +528,7 @@ Page {
                             NumberAnimation { duration: 320; easing.type: Easing.OutCubic }
                         }
                     }
+                    Behavior on opacity { FadeAnimation { } }
                     Behavior on rotation {
                         enabled: card.ready
                         SequentialAnimation {
