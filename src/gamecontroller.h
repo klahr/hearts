@@ -114,6 +114,8 @@ private:
     hearts::Bot m_bot;
     QSettings m_settings;
     QTimer m_botTimer;
+    // Holds the play while the cards passed to you are shown.
+    QTimer m_receivedTimer;
     hearts::Cards m_received;
     int m_difficulty = 1;
     int m_target = 100;

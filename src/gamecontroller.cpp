@@ -38,6 +38,12 @@ GameController::GameController(QObject *parent)
     m_speed = qBound(0, m_settings.value(QStringLiteral("speed"), 1).toInt(), 3);
     m_botTimer.setSingleShot(true);
     connect(&m_botTimer, &QTimer::timeout, this, &GameController::botStep);
+    m_receivedTimer.setSingleShot(true);
+    m_receivedTimer.setInterval(2000);
+    connect(&m_receivedTimer, &QTimer::timeout, this, [this]() {
+        m_received.clear();
+        afterAction();
+    });
 }
 
 int GameController::phase() const
@@ -98,7 +104,8 @@ QVariantList GameController::taken() const
 
 bool GameController::humanTurn() const
 {
-    return m_started && m_game.phase() == hearts::Phase::Play && m_game.turn() == Human;
+    return m_started && m_game.phase() == hearts::Phase::Play && m_game.turn() == Human
+           && !m_receivedTimer.isActive();
 }
 
 QVariantList GameController::scores() const
@@ -193,6 +200,7 @@ QString GameController::playerName(int player) const
 void GameController::newGame()
 {
     m_botTimer.stop();
+    m_receivedTimer.stop();
     m_bot.setDifficulty(static_cast<Difficulty>(m_difficulty));
     m_game.setTarget(m_target);
     m_game.newGame();
@@ -209,6 +217,7 @@ bool GameController::pass(const QVariantList &cardIds)
         return false;
     // The bots have passed already, so the cards have changed hands.
     m_received = m_game.passed(m_game.passSource(Human));
+    m_receivedTimer.start();
     afterAction();
     return true;
 }
@@ -226,6 +235,7 @@ bool GameController::nextHand()
 {
     if (!m_game.nextHand())
         return false;
+    m_receivedTimer.stop();
     m_received.clear();
     afterAction();
     return true;
@@ -257,7 +267,7 @@ void GameController::afterAction()
     if (m_game.phase() == hearts::Phase::GameOver)
         recordResult();
 
-    if (m_game.phase() == hearts::Phase::Play) {
+    if (m_game.phase() == hearts::Phase::Play && !m_receivedTimer.isActive()) {
         if (m_game.trickComplete()) {
             m_botTimer.setInterval(TrickHoldMs[m_speed]);
             m_botTimer.start();

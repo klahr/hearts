@@ -75,6 +75,15 @@ Page {
         return { x: x, y: top + tableRow.height - cardHeight }
     }
 
+    // Where the cards you pass gather, in front of the player receiving them.
+    function passArea() {
+        var off = Math.round(cardWidth * 0.3)
+        var w = cardWidth + 2 * off
+        var spot = trickSpot(game.passTarget)
+        var x = Math.max(Theme.paddingSmall, Math.min(page.width - w - Theme.paddingSmall, spot.x + (cardWidth - w) / 2))
+        return { x: x, y: spot.y, width: w, height: cardHeight, off: off }
+    }
+
     // Where each player keeps the tricks taken: under their own cards, yours
     // behind the first row of your hand.
     function pileSpot(player) {
@@ -141,8 +150,10 @@ Page {
                               delay: 0, glowColor: Cards.playerColor(s) }
         }
 
-        // Your cards, centred, in two rows while there are many.
-        ids = hands[0]
+        // Your cards, centred, in two rows while there are many; the ones
+        // chosen to pass wait in the pass area.
+        var choosing = game.phase === Hearts.Pass && !game.humanPassed
+        ids = choosing ? hands[0].filter(function(id) { return page.selected.indexOf(id) < 0 }) : hands[0]
         n = ids.length
         var top = n > 7 ? Math.ceil(n / 2) : n
         off = top > 1 ? Math.min(cw * 0.76, (w - 2 * margin - cw) / (top - 1)) : 0
@@ -157,8 +168,9 @@ Page {
 
         // West and east hold their cards sideways at the edges, north
         // across the top.
+        // The cards they pass stay in their hands until the exchange.
         for (s = 1; s <= 3; s += 2) {
-            ids = hands[s]
+            ids = hands[s].concat(game.passed[s])
             n = ids.length
             off = n > 1 ? Math.min(cw * 0.3, (tableRow.height - cw) / (n - 1)) : 0
             var centreX = s === 1 ? sideShown - ch / 2 : w - sideShown + ch / 2
@@ -167,7 +179,7 @@ Page {
                 p[ids[i]] = { x: centreX - cw / 2, y: centreY + i * off - ch / 2, z: 30 + i, down: true, rot: 90,
                               role: "bot", delay: dealing ? i * 30 : 0 }
         }
-        ids = hands[2]
+        ids = hands[2].concat(game.passed[2])
         n = ids.length
         off = n > 1 ? Math.min(cw * 0.22, (w - 2 * margin - cw) / (n - 1)) : 0
         x0 = (w - cw - (n - 1) * off) / 2
@@ -175,13 +187,11 @@ Page {
             p[ids[i]] = { x: x0 + i * off, y: cluster.y + northRow.y, z: 30 + i, down: true, rot: 0,
                           role: "bot", delay: dealing ? i * 30 : 0 }
 
-        // Cards laid aside to pass wait in front of their player.
-        for (s = 0; s < 4; ++s) {
-            spot = trickSpot(s)
-            ids = game.passed[s]
-            for (i = 0; i < ids.length; ++i)
-                p[ids[i]] = { x: spot.x + i * Theme.paddingMedium, y: spot.y + i * Theme.paddingSmall, z: 80 + i,
-                              down: true, rot: 0, role: "passed", delay: i * 60 }
+        if (choosing) {
+            var area = passArea()
+            for (i = 0; i < page.selected.length; ++i)
+                p[page.selected[i]] = { x: area.x + i * area.off, y: area.y, z: 80 + i, down: false, rot: 0,
+                                        role: "passing", delay: 0 }
         }
 
         // The trick, each card in front of whoever played it; the winning
@@ -436,6 +446,39 @@ Page {
                 }
             }
 
+            // The area your passed cards gather in, by the player receiving them.
+            Item {
+                readonly property var area: page.passArea()
+                x: area.x - Theme.paddingSmall
+                y: area.y - Theme.paddingSmall
+                width: area.width + 2 * Theme.paddingSmall
+                height: area.height + 2 * Theme.paddingSmall
+                opacity: game.phase === Hearts.Pass && !game.humanPassed ? 1 : 0
+                visible: opacity > 0
+                Behavior on opacity { FadeAnimation { } }
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: Theme.paddingMedium
+                    color: Theme.rgba(Cards.playerColor(game.passTarget), 0.08)
+                    border.color: Theme.rgba(Cards.playerColor(game.passTarget), 0.5)
+                    border.width: Math.max(1, Math.round(Theme.pixelRatio))
+                }
+
+                Label {
+                    anchors.centerIn: parent
+                    width: parent.width - 2 * Theme.paddingSmall
+                    opacity: page.selected.length === 0 ? 1 : 0
+                    Behavior on opacity { FadeAnimation { } }
+                    wrapMode: Text.Wrap
+                    horizontalAlignment: Text.AlignHCenter
+                    text: qsTr("Three cards for %1").arg(page.named(game.passTarget))
+                    color: Theme.secondaryHighlightColor
+                    font.pixelSize: Theme.fontSizeLarge
+                    font.family: Theme.fontFamilyHeading
+                }
+            }
+
             // Names and points by the rows of the count.
             Repeater {
                 model: 4
@@ -477,6 +520,7 @@ Page {
 
                     readonly property var place: page.places[index]
                     readonly property bool inHand: place.role === "hand"
+                    readonly property bool passing: place.role === "passing"
                     property int moveDelay
                     property bool ready
 
@@ -498,7 +542,7 @@ Page {
                     glowColor: place.glowColor !== undefined ? place.glowColor : Theme.highlightColor
                     // game.trick makes these follow the play.
                     dimmed: inHand && game.humanTurn && game.trick.length >= 0 && !game.canPlay(index)
-                    enabled: inHand && (game.phase === Hearts.Pass ? !game.humanPassed
+                    enabled: passing || inHand && (game.phase === Hearts.Pass ? !game.humanPassed
                                                                    : game.humanTurn && game.trick.length >= 0
                                                                      && game.canPlay(index))
 
