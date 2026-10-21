@@ -9,4 +9,4 @@ Name[sv]=Hjärter
 [X-Sailjail]
 OrganizationName=rs.r8
 ApplicationName=harbour-hearts
-Permissions=
+Permissions=Internet

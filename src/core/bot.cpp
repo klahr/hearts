@@ -8,16 +8,6 @@ namespace {
 
 const int HardSamples = 24;
 
-bool contains(const Cards &cards, const Card &card)
-{
-    return std::find(cards.begin(), cards.end(), card) != cards.end();
-}
-
-int countSuit(const Cards &cards, int suit)
-{
-    return static_cast<int>(std::count_if(cards.begin(), cards.end(), [suit](const Card &c) { return c.suit == suit; }));
-}
-
 bool wasPlayed(const Game &game, const Card &card)
 {
     for (const Play &p : game.played())

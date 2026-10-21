@@ -81,7 +81,7 @@ TEST(cards_have_points_and_aces_high)
     CHECK_EQ(countPoints(fullDeck()), 26);
 
     Cards hand = parseCards("AH 2H KS QD 2C AC 3S");
-    sortHand(hand);
+    sortAlternating(hand);
     CHECK(hand == parseCards("2C AC QD 3S KS 2H AH"));
 }
 

@@ -4,6 +4,7 @@ import harbour.hearts 1.0
 import "../components"
 import "../cards"
 import "../cards/cards.js" as Cards
+import "../online"
 
 Page {
     id: page
@@ -25,6 +26,16 @@ Page {
     readonly property real scorePointsWidth: Math.round(cardWidth)
 
     readonly property var places: computePlaces()
+    // Holding the table: the last trick shows over this one.
+    readonly property bool peeking: peek.peeking && game.lastTrick.length > 0
+
+    function lastTrickWinner() {
+        var last = game.lastTrick
+        for (var i = 0; i < last.length; ++i)
+            if (last[i].won)
+                return last[i].player
+        return -1
+    }
 
     allowedOrientations: Orientation.Portrait
 
@@ -203,6 +214,18 @@ Page {
                                  glow: trick[i].player === game.trickWinner,
                                  glowColor: Cards.playerColor(trick[i].player) }
         }
+
+        // Held down on the table: the last trick back up, over this one.
+        if (peeking) {
+            for (i = 0; i < trick.length; ++i)
+                p[trick[i].card].hidden = true
+            var last = game.lastTrick
+            for (i = 0; i < last.length; ++i) {
+                spot = trickSpot(last[i].player)
+                p[last[i].card] = { x: spot.x, y: spot.y, z: 300 + i, down: false, rot: 0, role: "last", delay: 0,
+                                    glow: last[i].won, glowColor: Cards.playerColor(last[i].player) }
+            }
+        }
         return p
     }
 
@@ -215,6 +238,8 @@ Page {
     }
 
     RemorsePopup { id: remorse }
+
+    ConnectionBanner { }
 
     SilicaFlickable {
         anchors.fill: parent
@@ -230,7 +255,14 @@ Page {
                 onClicked: pageStack.push(Qt.resolvedUrl("SettingsPage.qml"))
             }
             MenuItem {
+                text: online.active ? qsTr("Online table") : qsTr("Play online")
+                onClicked: pageStack.push(Qt.resolvedUrl(online.atTable ? "../online/TablePage.qml"
+                                                                        : "../online/LobbyPage.qml"))
+            }
+            MenuItem {
                 text: qsTr("New game")
+                // Online, a new game starts only once this one is over.
+                visible: !online.active || game.phase === Hearts.GameOver
                 onClicked: page.startNewGame()
             }
         }
@@ -315,12 +347,15 @@ Page {
                                 switch (game.phase) {
                                 case Hearts.Pass:
                                     if (game.humanPassed)
-                                        return ""
+                                        return online.active ? qsTr("Waiting for the others to pass…") : ""
                                     return [qsTr("Choose three cards for %1, on your left."),
                                             qsTr("Choose three cards for %1, on your right."),
                                             qsTr("Choose three cards for %1, across.")][Math.min(game.passDirection, 2)]
                                             .arg(page.named(game.passTarget))
                                 case Hearts.Play:
+                                    if (page.peeking)
+                                        return page.lastTrickWinner() === 0 ? page.coloured(0, qsTr("You took the last trick."))
+                                                                            : qsTr("%1 took the last trick.").arg(page.named(page.lastTrickWinner()))
                                     if (game.trickWinner >= 0) {
                                         var points = page.trickPoints()
                                         if (game.trickWinner === 0)
@@ -429,7 +464,8 @@ Page {
                         Button {
                             visible: game.phase === Hearts.Pass && !game.humanPassed
                             enabled: page.selected.length === 3
-                            text: [qsTr("To West"), qsTr("To East"), qsTr("To North")][Math.min(game.passDirection, 2)]
+                            text: online.active ? qsTr("To %1").arg(game.playerName(game.passTarget))
+                                                : [qsTr("To West"), qsTr("To East"), qsTr("To North")][Math.min(game.passDirection, 2)]
                             onClicked: game.pass(page.selected)
                         }
                         Button {
@@ -447,36 +483,12 @@ Page {
             }
 
             // The area your passed cards gather in, by the player receiving them.
-            Item {
-                readonly property var area: page.passArea()
-                x: area.x - Theme.paddingSmall
-                y: area.y - Theme.paddingSmall
-                width: area.width + 2 * Theme.paddingSmall
-                height: area.height + 2 * Theme.paddingSmall
-                opacity: game.phase === Hearts.Pass && !game.humanPassed ? 1 : 0
-                visible: opacity > 0
-                Behavior on opacity { FadeAnimation { } }
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: Theme.paddingMedium
-                    color: Theme.rgba(Cards.playerColor(game.passTarget), 0.08)
-                    border.color: Theme.rgba(Cards.playerColor(game.passTarget), 0.5)
-                    border.width: Math.max(1, Math.round(Theme.pixelRatio))
-                }
-
-                Label {
-                    anchors.centerIn: parent
-                    width: parent.width - 2 * Theme.paddingSmall
-                    opacity: page.selected.length === 0 ? 1 : 0
-                    Behavior on opacity { FadeAnimation { } }
-                    wrapMode: Text.Wrap
-                    horizontalAlignment: Text.AlignHCenter
-                    text: qsTr("Three cards for %1").arg(page.named(game.passTarget))
-                    color: Theme.secondaryHighlightColor
-                    font.pixelSize: Theme.fontSizeLarge
-                    font.family: Theme.fontFamilyHeading
-                }
+            ChoiceArea {
+                area: page.passArea()
+                color: Cards.playerColor(game.passTarget)
+                text: qsTr("Three cards for %1").arg(page.named(game.passTarget))
+                empty: page.selected.length === 0
+                shown: game.phase === Hearts.Pass && !game.humanPassed
             }
 
             // Names and points by the rows of the count.
@@ -511,32 +523,32 @@ Page {
                 }
             }
 
+            // Hold the table to see the last trick.
+            PeekArea {
+                id: peek
+                y: cluster.y + tableRow.y
+                width: parent.width
+                height: tableRow.height
+                enabled: game.phase === Hearts.Play && game.lastTrick.length > 0
+            }
+
             // ---------------------------------------------------- cards
+            TapToPlay {
+                id: tapToPlay
+                twice: game.tapTwice
+            }
+
             // All 52 cards live here and glide to wherever the game puts them.
             Repeater {
                 model: 52
-                PlayingCard {
-                    id: card
-
-                    readonly property var place: page.places[index]
+                TableCard {
                     readonly property bool inHand: place.role === "hand"
                     readonly property bool passing: place.role === "passing"
-                    property int moveDelay
-                    property bool ready
 
-                    function moveToPlace() {
-                        moveDelay = place.delay
-                        x = place.x
-                        y = place.y
-                        rotation = place.rot
-                    }
-
+                    place: page.places[index]
                     width: cardWidth
                     cardId: index
-                    faceDown: place.down
-                    z: place.z
-                    opacity: place.hidden === true ? 0 : 1
-                    selected: inHand && page.selected.indexOf(index) >= 0
+                    selected: inHand && page.selected.indexOf(index) >= 0 || tapToPlay.raised === index
                     // The cards passed to you, and the card winning the trick.
                     glowing: place.glow === true || (inHand && page.received.indexOf(index) >= 0)
                     glowColor: place.glowColor !== undefined ? place.glowColor : Theme.highlightColor
@@ -546,39 +558,12 @@ Page {
                                                                    : game.humanTurn && game.trick.length >= 0
                                                                      && game.canPlay(index))
 
-                    onPlaceChanged: moveToPlace()
-                    Component.onCompleted: {
-                        moveToPlace()
-                        ready = true
-                    }
+                    onEnabledChanged: if (!enabled) tapToPlay.lower(index)
                     onClicked: {
                         if (game.phase === Hearts.Pass)
                             page.toggle(index)
-                        else
+                        else if (tapToPlay.tap(index))
                             game.play(index)
-                    }
-
-                    Behavior on x {
-                        enabled: card.ready
-                        SequentialAnimation {
-                            PauseAnimation { duration: card.moveDelay }
-                            NumberAnimation { duration: 320; easing.type: Easing.OutCubic }
-                        }
-                    }
-                    Behavior on y {
-                        enabled: card.ready
-                        SequentialAnimation {
-                            PauseAnimation { duration: card.moveDelay }
-                            NumberAnimation { duration: 320; easing.type: Easing.OutCubic }
-                        }
-                    }
-                    Behavior on opacity { FadeAnimation { } }
-                    Behavior on rotation {
-                        enabled: card.ready
-                        SequentialAnimation {
-                            PauseAnimation { duration: card.moveDelay }
-                            NumberAnimation { duration: 320; easing.type: Easing.OutCubic }
-                        }
                     }
                 }
             }

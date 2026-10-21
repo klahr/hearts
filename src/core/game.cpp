@@ -4,20 +4,6 @@
 
 namespace hearts {
 
-namespace {
-
-bool contains(const Cards &cards, const Card &card)
-{
-    return std::find(cards.begin(), cards.end(), card) != cards.end();
-}
-
-void removeCard(Cards &cards, const Card &card)
-{
-    cards.erase(std::find(cards.begin(), cards.end(), card));
-}
-
-} // namespace
-
 Game::Game(unsigned seed)
     : m_rng(seed)
 {
@@ -58,7 +44,7 @@ void Game::dealFrom(const Cards &deck)
     for (int i = 0; i < Players * HandSize; ++i)
         m_hand[i % Players].push_back(deck[i]);
     for (Cards &hand : m_hand)
-        sortHand(hand);
+        sortAlternating(hand);
     if (passDirection() == PassDirection::Hold)
         startPlay();
     else
@@ -118,7 +104,7 @@ bool Game::pass(int player, const Cards &cards)
         target.insert(target.end(), m_passed[p].begin(), m_passed[p].end());
     }
     for (Cards &hand : m_hand)
-        sortHand(hand);
+        sortAlternating(hand);
     startPlay();
     return true;
 }

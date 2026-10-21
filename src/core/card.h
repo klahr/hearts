@@ -14,6 +14,10 @@ using cards::Spades;
 using cards::parseCard;
 using cards::parseCards;
 using cards::fullDeck;
+using cards::contains;
+using cards::removeCard;
+using cards::countSuit;
+using cards::sortAlternating;
 
 inline const Card TwoOfClubs(2, Clubs);
 inline const Card QueenOfSpades(12, Spades);
@@ -22,8 +26,5 @@ inline const Card QueenOfSpades(12, Spades);
 inline int points(const Card &c) { return c.suit == Hearts ? 1 : (c == QueenOfSpades ? 13 : 0); }
 
 int countPoints(const Cards &cards);
-
-// Clubs, diamonds, spades, hearts, each from low to high, as a hand is held.
-void sortHand(Cards &cards);
 
 } // namespace hearts
