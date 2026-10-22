@@ -59,7 +59,9 @@ Page {
     }
 
     // A player's name, or a line meant for you, in the player's colour.
-    function coloured(player, text) { return "<font color=\"" + Cards.playerColor(player) + "\">" + text + "</font>" }
+    // Grey and faint for a player who has lost the connection, until a bot plays for them.
+    function seatColor(player) { return online.seats.length && online.away(online.toTable(player)) ? Cards.awayColor(player) : Cards.playerColor(player) }
+    function coloured(player, text) { return "<font color=\"" + seatColor(player) + "\">" + text + "</font>" }
     function named(player) { return coloured(player, game.playerName(player)) }
 
     // A heart is one point, the queen of spades thirteen.
@@ -289,7 +291,7 @@ Page {
                         target: game.gameTarget
                         handPoints: game.phase === Hearts.Play ? game.handPoints[index] : 0
                         active: game.phase === Hearts.Play && game.turn === index
-                        color: Cards.playerColor(index)
+                        color: page.seatColor(index)
                     }
                 }
             }
@@ -508,7 +510,7 @@ Page {
                         width: page.scoreNameWidth - Theme.paddingMedium
                         y: Theme.paddingSmall
                         text: game.playerName(index)
-                        color: Cards.playerColor(index)
+                        color: page.seatColor(index)
                         font.pixelSize: Theme.fontSizeMedium
                         truncationMode: TruncationMode.Fade
                     }
